@@ -78,16 +78,35 @@ class SignalEncoder(nn.Module):
         x = x.reshape(-1, self.reshape_)
         return self.fc(x)
 
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from typing import Tuple
-
 class SignalDecoder(nn.Module):
+    """
+    Decodes a latent vector into 1D/2D signal
+
+    Args:
+        signal_dim:
+            Size of input signal. For images, it is (height, width).
+            For spectra, it is (length,)
+        z_dim:
+            Number of fully-connected neurons in a "bottleneck layer"
+            (latent dimensions)
+        nb_layers:
+            Number of convolutional layers
+        nb_filters:
+            Number of convolutional filters (aka "kernels") in each layer
+        **batch_norm (bool):
+            Apply batch normalization after each convolutional layer
+            (Default: True)
+        **upsampling (bool):
+            Performs upsampling+convolution operation twice on the reshaped latent
+            vector (starting from image/spectra dims 4x smaller than the target dims)
+            before passing  to the decoder
+    """
     def __init__(self, signal_dim: Tuple[int],
                  z_dim: int, nb_layers: int, nb_filters: int,
                  **kwargs: bool) -> None:
+        """
+        Initializes module parameters
+        """
         super(SignalDecoder, self).__init__()
         self.upsampling = kwargs.get("upsampling", False)
         bn = kwargs.get('batch_norm', True)
@@ -101,32 +120,40 @@ class SignalDecoder(nn.Module):
         n = np.product(signal_dim)
         self.reshape_ = (nb_filters, *signal_dim)
         self.fc = nn.Linear(z_dim, nb_filters*n)
-        
-        # LSTM layer
-        self.lstm = nn.LSTM(input_size=nb_filters, hidden_size=nb_filters, num_layers=nb_layers, batch_first=True)
-        
-        # Output layer
+        if self.upsampling:
+            self.deconv1 = ConvBlock(
+                ndim, 1, nb_filters, nb_filters,
+                lrelu_a=0.1, batch_norm=bn)
+            self.deconv2 = ConvBlock(
+                ndim, 1, nb_filters, nb_filters,
+                lrelu_a=0.1, batch_norm=bn)
+        self.dilblock = DilatedBlock(
+            ndim, nb_filters, nb_filters,
+            dilation_values=torch.arange(1, nb_layers + 1).tolist(),
+            padding_values=torch.arange(1, nb_layers + 1).tolist(),
+            lrelu_a=0.1, batch_norm=bn)
+        self.conv = ConvBlock(
+            ndim, 1, nb_filters, 1,
+            lrelu_a=0.1, batch_norm=bn)
         if ndim == 2:
-            self.out = nn.Linear(nb_filters, np.prod(signal_dim))
+            self.out = nn.Conv2d(1, 1, 1)
         else:
-            self.out = nn.Linear(nb_filters, signal_dim[0])
+            self.out = nn.Conv1d(1, 1, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Generates a signal from embedded features (latent vector)
+        """
         x = self.fc(x)
         x = x.reshape(-1, *self.reshape_)
         if self.upsampling:
-            x = F.interpolate(x, scale_factor=4, mode="nearest")
-        # Flatten the tensor for LSTM input
-        x = x.view(x.size(0), -1, self.reshape_[0])
-        # LSTM layer
-        x, _ = self.lstm(x)
-        # Take the output from the last time step
-        x = x[:, -1, :]
-        # Output layer
-        x = self.out(x)
-        x = torch.unsqueeze(x, 1)
-        return x
-
+            x = self.deconv1(x)
+            x = F.interpolate(x, scale_factor=2, mode="nearest")
+            x = self.deconv2(x)
+            x = F.interpolate(x, scale_factor=2, mode="nearest")
+        x = self.dilblock(x)
+        x = self.conv(x)
+        return self.out(x)
 
 class SignalED(nn.Module):
     """
