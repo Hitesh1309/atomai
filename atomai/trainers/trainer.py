@@ -537,7 +537,7 @@ class BaseTrainer:
         ########################################### Start of Edit ##########################################            
         if self.ES and not self.swa:
             self.patience=kwargs.get("patience",self.training_cycles//10)
-            self.tolerance=kwargs.get("tolerance",1e-4)
+            self.tolerance=kwargs.get("tolerance",1e-5)
             self.min_val_loss=sys.float_info.max
             self.verbose=kwargs.get("verbose",False)
             self.ES_model=None #To store Early stoppng model eventually
@@ -561,13 +561,13 @@ class BaseTrainer:
             if optimizer is None:
                 # will be overwitten by lr_scheduler (if activated)
                 ########################################### Start of Edit #########################################
-                self.optimizer = torch.optim.Adam(params, lr=1e-3, weight_decay=self.reg)
+                self.optimizer = torch.optim.Adam(params, lr=1e-4, weight_decay=self.reg)
             else:
                 try:
-                    self.optimizer = optimizer(params,lr=1e-3, weight_decay=self.reg)
+                    self.optimizer = optimizer(params,lr=1e-4, weight_decay=self.reg)
                 except:
                     print("Optimizer does not support Weight decay")
-                    self.optimizer = optimizer(params,lr=1e-3)
+                    self.optimizer = optimizer(params,lr=1e-4)
                 #self.optimizer = optimizer(params)
             
             
