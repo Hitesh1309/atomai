@@ -60,6 +60,8 @@ class SignalEncoder(nn.Module):
         if isinstance(signal_dim, int):
             signal_dim = (signal_dim,)
         ndim = 2 if len(signal_dim) == 2 else 1
+
+        pretrained = True
         
         # Using pretrained ResNet
         if pretrained:
