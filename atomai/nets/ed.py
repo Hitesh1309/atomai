@@ -54,13 +54,12 @@ class SignalEncoder(nn.Module):
     """
     def __init__(self, signal_dim: Tuple[int],
                  z_dim: int, nb_layers: int, nb_filters: int,
-                 **kwargs: int) -> None:
-
+                 **kwargs: bool) -> None:
         super(SignalEncoder, self).__init__()
         if isinstance(signal_dim, int):
             signal_dim = (signal_dim,)
         ndim = 2 if len(signal_dim) == 2 else 1
-        self.conv1 = nn.Conv2d(ndim, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)  # Adjusted for 1 input channel
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
