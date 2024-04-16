@@ -66,7 +66,14 @@ class SignalEncoder(nn.Module):
         # Using pretrained ResNet
         if pretrained:
             resnet = models.resnet34(pretrained=True)
-            self.resnet = nn.Sequential(*list(resnet.children())[:-1])
+            self.resnet = nn.Sequential(*list(resnet.children())[:-2])  # Exclude final average pooling and fully connected layers
+            
+            # Modify the first convolutional layer to accept input of the desired size
+            if ndim == 2:
+                self.resnet[0] = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+            else:
+                self.resnet[0] = nn.Conv1d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)
+            
             self.fc = nn.Linear(resnet.fc.in_features, z_dim)
         else:
             self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)  # Adjusted for 1 input channel
