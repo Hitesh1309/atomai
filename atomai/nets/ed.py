@@ -17,66 +17,83 @@ import torch.nn.functional as F
 from .blocks import ConvBlock, DilatedBlock
 
 
+class BasicBlock(nn.Module):
+    """
+    Basic residual block for ResNet
+    """
+    def __init__(self, in_channels, out_channels, stride=1):
+        super(BasicBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.downsample = None
+        if stride != 1 or in_channels != out_channels:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(out_channels)
+            )
+
+    def forward(self, x):
+        identity = x
+        out = self.conv1(x)
+        out = self.bn1(out)
+        out = self.relu(out)
+        out = self.conv2(out)
+        out = self.bn2(out)
+        if self.downsample is not None:
+            identity = self.downsample(x)
+        out += identity
+        out = self.relu(out)
+        return out
+
 class SignalEncoder(nn.Module):
     """
-    Encodes 1D/2D signal into a latent vector
-
-    Args:
-        signal_dim:
-            Size of input signal. For images, it is (height, width).
-            For spectra, it is (length,)
-        z_dim:
-            Number of fully-connected neurons in a "bottleneck layer"
-            (latent dimensions)
-        nb_layers:
-            Number of convolutional layers
-        nb_filters:
-            Number of convolutional filters (aka "kernels") in each layer
-        **batch_norm (bool):
-            Apply batch normalization after each convolutional layer
-            (Default: True)
-        **downsampling (int):
-            Downsamples input data by this factor before passing
-            to convolutional layers (Default: no downsampling)
-
+    ResNet-34 encoder for 1D/2D signals
     """
-    def __init__(self, signal_dim: Tuple[int],
-                 z_dim: int, nb_layers: int, nb_filters: int,
-                 **kwargs: int) -> None:
-        """
-        Initialize module parameters
-        """
-        super(SignalEncoder, self).__init__()
+    def __init__(self, signal_dim: Tuple[int], z_dim: int):
+        super(ResNetEncoder, self).__init__()
         if isinstance(signal_dim, int):
             signal_dim = (signal_dim,)
-        if not 0 < len(signal_dim) < 3:
-            raise AssertionError("signal dimensionality must be to 1D or 2D")
         ndim = 2 if len(signal_dim) == 2 else 1
-        self.downsample = kwargs.get("downsampling", 0)
-        bn = kwargs.get('batch_norm', True)
-        if self.downsample:
-            signal_dim = [s // self.downsample for s in signal_dim]
-        n = np.product(signal_dim)
-        self.reshape_ = nb_filters * n
-        self.conv = ConvBlock(
-            ndim, nb_layers, 1, nb_filters,
-            lrelu_a=0.1, batch_norm=bn)
-        self.fc = nn.Linear(nb_filters * n, z_dim)
+        self.conv1 = nn.Conv2d(ndim, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        
+        # ResNet stages
+        self.layer1 = self._make_layer(64, 64, 3, stride=1)
+        self.layer2 = self._make_layer(64, 128, 4, stride=2)
+        self.layer3 = self._make_layer(128, 256, 6, stride=2)
+        self.layer4 = self._make_layer(256, 512, 3, stride=2)
+        
+        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(512, z_dim)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Embeddes the input signal into a latent vector
-        """
-        if self.downsample:
-            if x.ndim == 3:
-                x = F.avg_pool1d(
-                    x, self.downsample, self.downsample)
-            else:
-                x = F.avg_pool2d(
-                    x, self.downsample, self.downsample)
-        x = self.conv(x)
-        x = x.reshape(-1, self.reshape_)
-        return self.fc(x)
+    def _make_layer(self, in_channels, out_channels, blocks, stride=1):
+        layers = []
+        layers.append(BasicBlock(in_channels, out_channels, stride))
+        in_channels = out_channels
+        for _ in range(1, blocks):
+            layers.append(BasicBlock(in_channels, out_channels))
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        x = self.fc(x)
+        return x
 
 class SignalDecoder(nn.Module):
     """
