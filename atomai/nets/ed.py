@@ -14,6 +14,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
 from .blocks import ConvBlock, DilatedBlock
 
 
@@ -53,25 +54,32 @@ class SignalEncoder(nn.Module):
     ResNet-34 encoder for 1D/2D signals
     """
     def __init__(self, signal_dim: Tuple[int],
-                 z_dim: int, nb_layers: int, nb_filters: int,
+                 z_dim: int, pretrained: bool = True,
                  **kwargs: bool) -> None:
         super(SignalEncoder, self).__init__()
         if isinstance(signal_dim, int):
             signal_dim = (signal_dim,)
         ndim = 2 if len(signal_dim) == 2 else 1
-        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)  # Adjusted for 1 input channel
-        self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU(inplace=True)
-        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
-        # ResNet stages
-        self.layer1 = self._make_layer(64, 64, 3, stride=1)
-        self.layer2 = self._make_layer(64, 128, 4, stride=2)
-        self.layer3 = self._make_layer(128, 256, 6, stride=2)
-        self.layer4 = self._make_layer(256, 512, 3, stride=2)
+        # Using pretrained ResNet
+        if pretrained:
+            resnet = models.resnet34(pretrained=True)
+            self.resnet = nn.Sequential(*list(resnet.children())[:-1])
+            self.fc = nn.Linear(resnet.fc.in_features, z_dim)
+        else:
+            self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3, bias=False)  # Adjusted for 1 input channel
+            self.bn1 = nn.BatchNorm2d(64)
+            self.relu = nn.ReLU(inplace=True)
+            self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         
-        self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
-        self.fc = nn.Linear(512, z_dim)
+            # ResNet stages
+            self.layer1 = self._make_layer(64, 64, 3, stride=1)
+            self.layer2 = self._make_layer(64, 128, 4, stride=2)
+            self.layer3 = self._make_layer(128, 256, 6, stride=2)
+            self.layer4 = self._make_layer(256, 512, 3, stride=2)
+            
+            self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
+            self.fc = nn.Linear(512, z_dim)
 
     def _make_layer(self, in_channels, out_channels, blocks, stride=1):
         layers = []
@@ -82,19 +90,24 @@ class SignalEncoder(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        x = self.maxpool(x)
+        if hasattr(self, 'resnet'):
+            x = self.resnet(x)
+            x = torch.flatten(x, 1)
+            x = self.fc(x)
+        else:
+            x = self.conv1(x)
+            x = self.bn1(x)
+            x = self.relu(x)
+            x = self.maxpool(x)
 
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-        x = self.layer4(x)
+            x = self.layer1(x)
+            x = self.layer2(x)
+            x = self.layer3(x)
+            x = self.layer4(x)
 
-        x = self.avgpool(x)
-        x = torch.flatten(x, 1)
-        x = self.fc(x)
+            x = self.avgpool(x)
+            x = torch.flatten(x, 1)
+            x = self.fc(x)
         return x
 
 class SignalDecoder(nn.Module):
