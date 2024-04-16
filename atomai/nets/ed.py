@@ -52,8 +52,11 @@ class SignalEncoder(nn.Module):
     """
     ResNet-34 encoder for 1D/2D signals
     """
-    def __init__(self, signal_dim: Tuple[int], z_dim: int):
-        super(ResNetEncoder, self).__init__()
+    def __init__(self, signal_dim: Tuple[int],
+                 z_dim: int, nb_layers: int, nb_filters: int,
+                 **kwargs: int) -> None:
+
+        super(SignalEncoder, self).__init__()
         if isinstance(signal_dim, int):
             signal_dim = (signal_dim,)
         ndim = 2 if len(signal_dim) == 2 else 1
