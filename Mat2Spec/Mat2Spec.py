@@ -245,7 +245,7 @@ def compute_c_loss(BX, BY, tau=1):
     c_loss = -torch.mean(torch.log(c))
     return c_loss
 
-def compute_alpha_loss(self, fe_mu):
+def compute_alpha_loss(fe_mu):
     alpha_loss = 0
     for i in range(fe_mu.size(0) - 1):
         alpha_loss += F.mse_loss(fe_mu[i], fe_mu[i + 1])
@@ -268,7 +268,7 @@ def compute_loss(input_label, output, NORMALIZER, args):
     fe_mu = fe_mu.squeeze(0).expand(fx_mu.shape[0], fe_mu.shape[0], fe_mu.shape[1])
     fe_logvar = fe_logvar.squeeze(0).expand(fx_mu.shape[0], fe_logvar.shape[0], fe_logvar.shape[1])
 
-    alpha_loss = self.compute_alpha_loss(fe_mu)
+    alpha_loss = compute_alpha_loss(fe_mu)
     
     fe_mu = fe_mu.repeat(1, args.Mat2Spec_K, 1)
     fe_logvar = fe_logvar.repeat(1, args.Mat2Spec_K, 1)
