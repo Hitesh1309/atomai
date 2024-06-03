@@ -268,7 +268,7 @@ def compute_loss(input_label, output, NORMALIZER, args):
     fe_mu = fe_mu.squeeze(0).expand(fx_mu.shape[0], fe_mu.shape[0], fe_mu.shape[1])
     fe_logvar = fe_logvar.squeeze(0).expand(fx_mu.shape[0], fe_logvar.shape[0], fe_logvar.shape[1])
 
-    alpha_loss = compute_alpha_loss(fe_mu)
+    alpha_loss = self.compute_alpha_loss(fe_mu)
     
     fe_mu = fe_mu.repeat(1, args.Mat2Spec_K, 1)
     fe_logvar = fe_logvar.repeat(1, args.Mat2Spec_K, 1)
