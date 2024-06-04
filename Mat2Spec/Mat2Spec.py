@@ -247,7 +247,8 @@ def compute_c_loss(BX, BY, tau=1):
 
 def compute_alpha_loss(fe_mix_coeff):
     alpha_loss = 0
-    for i in range(fe_mu.size(0) - 1):
+    print(fe_mix_coeff.shape)
+    for i in range(fe_mix_coeff.size(0) - 1):
         alpha_loss += torch.sum(torch.abs(fe_mu[i] - fe_mu[i + 1]))
         print(alpha_loss)
     return alpha_loss
