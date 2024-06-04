@@ -245,7 +245,7 @@ def compute_c_loss(BX, BY, tau=1):
     c_loss = -torch.mean(torch.log(c))
     return c_loss
 
-def compute_alpha_loss(fe_mu):
+def compute_alpha_loss(fe_mix_coeff):
     alpha_loss = 0
     for i in range(fe_mu.size(0) - 1):
         alpha_loss += torch.sum(torch.abs(fe_mu[i] - fe_mu[i + 1]))
@@ -260,16 +260,16 @@ def compute_loss(input_label, output, NORMALIZER, args):
     fe_mix_coeff = output['fe_mix_coeff']
     fx_mix_coeff = F.softmax(fx_mix_coeff, dim=-1)
     fe_mix_coeff = F.softmax(fe_mix_coeff, dim=-1)
+
+    alpha_loss = compute_alpha_loss(fe_mix_coeff)
+    
     fe_mix_coeff = fe_mix_coeff.repeat(1, args.Mat2Spec_K)
     fx_mix_coeff = fx_mix_coeff.repeat(1, args.Mat2Spec_label_dim)
     mix_coeff = fe_mix_coeff * fx_mix_coeff    
     fx_mu = fx_mu.repeat(1, args.Mat2Spec_label_dim, 1)
     fx_logvar = fx_logvar.repeat(1, args.Mat2Spec_label_dim, 1)
     fe_mu = fe_mu.squeeze(0).expand(fx_mu.shape[0], fe_mu.shape[0], fe_mu.shape[1])
-    fe_logvar = fe_logvar.squeeze(0).expand(fx_mu.shape[0], fe_logvar.shape[0], fe_logvar.shape[1])
-
-    alpha_loss = compute_alpha_loss(fe_mu)
-    
+    fe_logvar = fe_logvar.squeeze(0).expand(fx_mu.shape[0], fe_logvar.shape[0], fe_logvar.shape[1])   
     fe_mu = fe_mu.repeat(1, args.Mat2Spec_K, 1)
     fe_logvar = fe_logvar.repeat(1, args.Mat2Spec_K, 1)
     kl_all = kl(fx_mu, fe_mu, fx_logvar, fe_logvar)
